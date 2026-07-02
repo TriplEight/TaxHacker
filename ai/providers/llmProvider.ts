@@ -80,11 +80,25 @@ async function requestLLMUnified(config: LLMConfig, req: LLMRequest): Promise<LL
     }
     const messages: BaseMessage[] = [new HumanMessage({ content: message_content })]
 
+    const invokeOpenAICompatible = async (msgs: BaseMessage[]): Promise<any> => {
+      const raw = await model.invoke(msgs)
+      const text = typeof raw.content === "string" ? raw.content : raw.content.map((c: any) => c.text || "").join("")
+      return JSON.parse(text.replace(/```(?:json)?\s*/g, "").trim())
+    }
+
     let response: any
     if (config.provider === "openai_compatible") {
-      const raw = await model.invoke(messages)
-      const text = typeof raw.content === "string" ? raw.content : raw.content.map((c: any) => c.text || "").join("")
-      response = JSON.parse(text.replace(/```(?:json)?\s*/g, "").trim())
+      try {
+        response = await invokeOpenAICompatible(messages)
+      } catch (e) {
+        if (req.attachments && req.attachments.length > 0) {
+          console.info(`[${config.provider}] Multimodal request failed, retrying text-only`)
+          const textOnlyMessages: BaseMessage[] = [new HumanMessage({ content: req.prompt })]
+          response = await invokeOpenAICompatible(textOnlyMessages)
+        } else {
+          throw e
+        }
+      }
     } else {
       const structuredModel = model.withStructuredOutput(req.schema, { name: "transaction" })
       response = await structuredModel.invoke(messages)
