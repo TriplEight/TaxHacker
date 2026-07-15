@@ -96,9 +96,9 @@ async function requestLLMUnified(config: LLMConfig, req: LLMRequest): Promise<LL
           let contentType = att.contentType
           let base64 = att.base64
           if (config.provider === "openai_compatible" && contentType !== "image/png" && contentType !== "image/jpeg") {
-            const pngBuffer = await sharp(Buffer.from(base64, "base64")).png().toBuffer()
-            base64 = pngBuffer.toString("base64")
-            contentType = "image/png"
+            const jpegBuffer = await sharp(Buffer.from(base64, "base64")).jpeg({ quality: 85 }).toBuffer()
+            base64 = jpegBuffer.toString("base64")
+            contentType = "image/jpeg"
           }
           return {
             type: "image_url",
