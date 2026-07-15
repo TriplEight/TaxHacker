@@ -95,8 +95,11 @@ async function requestLLMUnified(config: LLMConfig, req: LLMRequest): Promise<LL
         req.attachments.map(async (att) => {
           let contentType = att.contentType
           let base64 = att.base64
-          if (config.provider === "openai_compatible" && contentType !== "image/png" && contentType !== "image/jpeg") {
-            const jpegBuffer = await sharp(Buffer.from(base64, "base64")).jpeg({ quality: 85 }).toBuffer()
+          if (config.provider === "openai_compatible") {
+            const jpegBuffer = await sharp(Buffer.from(base64, "base64"))
+              .resize(768, 768, { fit: "inside", withoutEnlargement: true })
+              .jpeg({ quality: 85 })
+              .toBuffer()
             base64 = jpegBuffer.toString("base64")
             contentType = "image/jpeg"
           }
