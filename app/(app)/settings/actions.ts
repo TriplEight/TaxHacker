@@ -11,6 +11,7 @@ import {
 import { userFormSchema } from "@/forms/users"
 import { ActionState } from "@/lib/actions"
 import { getCurrentUser } from "@/lib/auth"
+import config from "@/lib/config"
 import { uploadStaticImage } from "@/lib/uploads"
 import { codeFromName, randomHexColor } from "@/lib/utils"
 import { LLMConfig, LLMProvider, testLLMProvider } from "@/ai/providers/llmProvider"
@@ -18,11 +19,13 @@ import { createCategory, deleteCategory, updateCategory } from "@/models/categor
 import { createCurrency, deleteCurrency, updateCurrency } from "@/models/currencies"
 import { createField, deleteField, updateField } from "@/models/fields"
 import { createProject, deleteProject, updateProject } from "@/models/projects"
-import { SettingsMap, updateSettings } from "@/models/settings"
+import { SELF_HOSTED_ONLY_SETTINGS, SettingsMap, updateSettings } from "@/models/settings"
 import { updateUser } from "@/models/users"
 import { Prisma, User } from "@/prisma/client"
 import { revalidatePath } from "next/cache"
 import path from "path"
+
+const SELF_HOSTED_ONLY_SETTINGS_SET = new Set<string>(SELF_HOSTED_ONLY_SETTINGS)
 
 export async function saveSettingsAction(
   _prevState: ActionState<SettingsMap> | null,
@@ -36,6 +39,9 @@ export async function saveSettingsAction(
   }
 
   for (const key in validatedForm.data) {
+    if (SELF_HOSTED_ONLY_SETTINGS_SET.has(key) && !config.selfHosted.isEnabled) {
+      continue
+    }
     const value = validatedForm.data[key as keyof typeof validatedForm.data]
     if (value !== undefined) {
       await updateSettings(user.id, key, value)
@@ -44,6 +50,7 @@ export async function saveSettingsAction(
 
   revalidatePath("/settings/currencies")
   revalidatePath("/settings/categories")
+  revalidatePath("/settings/llm")
   return { success: true }
 }
 
