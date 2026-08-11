@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { AnalyzeAllButton } from "@/components/unsorted/analyze-all-button"
+import { AnalyzeConcurrencyBadge } from "@/components/unsorted/analyze-concurrency-badge"
 import AnalyzeForm from "@/components/unsorted/analyze-form"
 import { getCurrentUser } from "@/lib/auth"
 import config from "@/lib/config"
@@ -12,7 +13,7 @@ import { getCurrencies } from "@/models/currencies"
 import { getFields } from "@/models/fields"
 import { getUnsortedFiles } from "@/models/files"
 import { getProjects } from "@/models/projects"
-import { getSettings } from "@/models/settings"
+import { getAnalyzeConcurrency, getSettings } from "@/models/settings"
 import { FileText, PartyPopper, Settings, Upload } from "lucide-react"
 import { Metadata } from "next"
 import Link from "next/link"
@@ -30,12 +31,16 @@ export default async function UnsortedPage() {
   const currencies = await getCurrencies(user.id)
   const fields = await getFields(user.id)
   const settings = await getSettings(user.id)
+  const analyzeConcurrency = getAnalyzeConcurrency(settings)
 
   return (
     <>
       <header className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">You have {files.length} unsorted files</h2>
-        {files.length > 1 && <AnalyzeAllButton />}
+        <div className="flex items-center gap-3">
+          <AnalyzeConcurrencyBadge />
+          {files.length > 1 && <AnalyzeAllButton />}
+        </div>
       </header>
 
       {config.selfHosted.isEnabled &&
@@ -80,6 +85,7 @@ export default async function UnsortedPage() {
                 currencies={currencies}
                 fields={fields}
                 settings={settings}
+                analyzeConcurrency={analyzeConcurrency}
               />
             </div>
           </Card>

@@ -11,6 +11,7 @@ export interface LLMConfig {
   apiKey: string
   model: string
   baseUrl?: string
+  maxConcurrency?: number
 }
 
 export interface LLMSettings {
@@ -41,10 +42,11 @@ function extractErrorInfo(error: unknown): {
   errorBody: unknown
 } {
   const obj = error as Record<string, unknown>
+  const causeObj = obj?.cause as Record<string, unknown> | undefined
   return {
     message: typeof obj?.message === "string" ? obj.message : undefined,
     cause: obj?.cause,
-    status: obj?.status as number | undefined,
+    status: (obj?.status as number | undefined) ?? (causeObj?.status as number | undefined),
     errorBody: obj?.error,
   }
 }
@@ -109,7 +111,11 @@ async function requestLLMUnified(config: LLMConfig, req: LLMRequest): Promise<LL
         : Array.isArray(rawContent.content)
           ? rawContent.content.map((c: { text?: string }) => c.text || "").join("")
           : ""
-      response = JSON.parse(text.replace(/```(?:json)?\s*/g, "").trim())
+      const cleaned = text.replace(/```(?:json)?\s*/g, "").trim()
+      // Some openai-compatible models emit raw control chars (e.g. a literal
+      // newline) inside JSON string values, which JSON.parse rejects. Replace
+      // them with spaces so the value parses (structural whitespace is unaffected).
+      response = JSON.parse(cleaned.replace(/[\u0000-\u001F]/g, " "))
     } else {
       const structuredModel = model.withStructuredOutput(req.schema!, { name: "transaction" })
       response = await structuredModel.invoke(messages) as Record<string, unknown>
@@ -144,10 +150,15 @@ async function requestLLMUnified(config: LLMConfig, req: LLMRequest): Promise<LL
       ? " — This model does not support image input. Use a vision-capable model or test the provider in Settings."
       : ""
 
+    const concurrencyHint =
+      info.status === 429 && (config.maxConcurrency ?? 1) > 1
+        ? " — rate-limited; lower \u201cMax concurrency\u201d for this provider in LLM settings and retry"
+        : ""
+
     return {
       output: {},
       provider: config.provider,
-      error: `${detail}${status}${body}${visionHint}`,
+      error: `${detail}${status}${body}${concurrencyHint}${visionHint}`,
     }
   }
 }
@@ -237,6 +248,7 @@ export async function testLLMProvider(config: LLMConfig): Promise<LLMTestResult>
 }
 
 export async function requestLLM(settings: LLMSettings, req: LLMRequest): Promise<LLMResponse> {
+  let lastError = "All LLM providers failed or are not configured"
   for (const config of settings.providers) {
     if (!config.model) {
       console.info("Skipping provider:", config.provider, "(no model)")
@@ -252,14 +264,14 @@ export async function requestLLM(settings: LLMSettings, req: LLMRequest): Promis
 
     if (!response.error) {
       return response
-    } else {
-      console.error(response.error)
     }
+    lastError = response.error
+    console.error(response.error)
   }
 
   return {
     output: {},
     provider: settings.providers[0]?.provider || "openai",
-    error: "All LLM providers failed or are not configured",
+    error: lastError,
   }
 }
